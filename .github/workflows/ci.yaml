@@ -50,8 +50,7 @@ jobs:
           echo "current_revision=$CURRENT" >> $GITHUB_OUTPUT
 
       - name: Zip Apigee proxy bundle
-        run: |
-          zip -r proxy.zip apiproxy
+        run: zip -r proxy.zip apiproxy
 
       - name: Import proxy to Apigee
         id: import_proxy
@@ -82,35 +81,26 @@ jobs:
             "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments"
 
       - name: Install Newman
-        run: |
-          npm install -g newman
+        run: npm install -g newman
 
       - name: Run Postman E2E Tests
         id: run_tests
+        continue-on-error: true # IMPORTANT: pour qu'on puisse gérer le rollback à la main
         run: |
           API_NAME="${{ steps.get_api_name.outputs.api_name }}"
-          ENV="eval"
           COLLECTION_PATH=$(find testE2E -type f -name "${API_NAME}*.postman_collection.json" | head -n 1)
-          
+
           if [[ -z "$COLLECTION_PATH" ]]; then
-          echo "❌ No Postman collection found for API: $API_NAME"
-          exit 1
-          fi
-
-          BASE_URL="https://${API_NAME}-eval-dot-primal-gate-456620-t1.apigee.net"
-
-          if [[ ! -f "$COLLECTION_PATH" ]]; then
-            echo "❌ Collection not found: $COLLECTION_PATH"
+            echo "❌ No Postman collection found for API: $API_NAME"
             exit 1
           fi
 
-          echo "▶️ Running tests on $BASE_URL..."
-          newman run "$COLLECTION_PATH" \
-            --env-var "baseUrl=$BASE_URL" \
-            --reporters cli
+          echo "▶️ Running tests using local collection: $COLLECTION_PATH"
+          newman run "$COLLECTION_PATH" --reporters cli
+          echo "TEST_EXIT_CODE=$?" >> $GITHUB_ENV
 
-      - name: Rollback if tests fail
-        if: failure()
+      - name: Rollback if tests failed
+        if: env.TEST_EXIT_CODE != '0'
         run: |
           echo "❌ Tests failed — starting rollback..."
           API_NAME="${{ steps.get_api_name.outputs.api_name }}"
@@ -134,4 +124,4 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments"
 
-          echo "✅ Rollback to revision $PREV_REVISION completed"
+          echo "✅ Rollback complete to revision $PREV_REVISION"
