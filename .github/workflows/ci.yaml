@@ -75,9 +75,12 @@ jobs:
           REVISION="${{ steps.import_proxy.outputs.revision }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
+          SERVICE_ACCOUNT="projects/primal-gate-456620-t1/serviceAccounts/sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com"
 
           curl -s -X POST \
             -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"override\": true, \"serviceAccount\": \"$SERVICE_ACCOUNT\"}" \
             "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments"
 
       - name: Install Newman
@@ -100,6 +103,7 @@ jobs:
             NEW_REVISION="${{ steps.import_proxy.outputs.revision }}"
             ORG="primal-gate-456620-t1"
             TOKEN="${{ steps.auth.outputs.access_token }}"
+            SERVICE_ACCOUNT="projects/primal-gate-456620-t1/serviceAccounts/sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com"
 
             if [[ -z "$PREV_REVISION" ]]; then
               echo "⚠️ No previous revision found. Cannot rollback."
@@ -114,6 +118,8 @@ jobs:
             echo "🔁 Rolling back to revision $PREV_REVISION..."
             curl -s -X POST \
               -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"override\": true, \"serviceAccount\": \"$SERVICE_ACCOUNT\"}" \
               "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments"
 
             echo "✅ Rollback complete to revision $PREV_REVISION"
