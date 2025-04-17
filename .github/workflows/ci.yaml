@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
 
 permissions:
   id-token: write
@@ -16,6 +17,7 @@ jobs:
       api_name: ${{ steps.get_current_revision.outputs.api_name }}
       current_revision: ${{ steps.get_current_revision.outputs.current_revision }}
       new_revision: ${{ steps.import_proxy.outputs.revision }}
+      environment: ${{ steps.set_env.outputs.environment }}
 
     steps:
       - name: Checkout source
@@ -32,6 +34,15 @@ jobs:
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v1
 
+      - name: Set environment name based on branch
+        id: set_env
+        run: |
+          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
+            echo "environment=prd" >> $GITHUB_OUTPUT
+          else
+            echo "environment=eval" >> $GITHUB_OUTPUT
+          fi
+
       - name: Get currently deployed revision
         id: get_current_revision
         run: |
@@ -41,7 +52,7 @@ jobs:
           echo "api_name=$API_NAME" >> $GITHUB_OUTPUT
 
           ORG="primal-gate-456620-t1"
-          ENV="eval"
+          ENV="${{ steps.set_env.outputs.environment }}"
           TOKEN="${{ steps.auth.outputs.access_token }}"
 
           CURRENT=$(curl -s -H "Authorization: Bearer $TOKEN" \
@@ -70,10 +81,11 @@ jobs:
           REVISION=$(echo "$RESPONSE" | grep -oP '"revision"\s*:\s*"\K[0-9]+')
           echo "revision=$REVISION" >> $GITHUB_OUTPUT
 
-      - name: Deploy to eval environment
+      - name: Deploy to environment
         run: |
           API_NAME="${{ steps.get_current_revision.outputs.api_name }}"
           REVISION="${{ steps.import_proxy.outputs.revision }}"
+          ENV="${{ steps.set_env.outputs.environment }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
 
@@ -81,7 +93,7 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"serviceAccount\": \"sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com\"}" \
-            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments?override=true"
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/$ENV/apis/$API_NAME/revisions/$REVISION/deployments?override=true"
 
   test:
     needs: deploy
@@ -122,8 +134,8 @@ jobs:
           API_NAME="${{ needs.deploy.outputs.api_name }}"
           NEW_REVISION="${{ needs.deploy.outputs.new_revision }}"
           PREV_REVISION="${{ needs.deploy.outputs.current_revision }}"
+          ENV="${{ needs.deploy.outputs.environment }}"
           ORG="primal-gate-456620-t1"
-          ENV="eval"
           TOKEN="$(gcloud auth print-access-token)"
           
           echo "❌ Tests failed — rolling back..."
