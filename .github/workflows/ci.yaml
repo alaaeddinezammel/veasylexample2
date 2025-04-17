@@ -83,9 +83,7 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
-      - name: Run Postman E2E Tests
-        id: run_tests
-        continue-on-error: true # IMPORTANT: pour qu'on puisse gérer le rollback à la main
+      - name: Run Postman E2E Tests and Rollback if Failed
         run: |
           API_NAME="${{ steps.get_api_name.outputs.api_name }}"
           COLLECTION_PATH=$(find testE2E -type f -name "${API_NAME}*.postman_collection.json" | head -n 1)
@@ -96,32 +94,28 @@ jobs:
           fi
 
           echo "▶️ Running tests using local collection: $COLLECTION_PATH"
-          newman run "$COLLECTION_PATH" --reporters cli
-          echo "TEST_EXIT_CODE=$?" >> $GITHUB_ENV
+          if ! newman run "$COLLECTION_PATH" --reporters cli; then
+            echo "❌ Tests failed — starting rollback..."
+            PREV_REVISION="${{ steps.get_current_revision.outputs.current_revision }}"
+            NEW_REVISION="${{ steps.import_proxy.outputs.revision }}"
+            ORG="primal-gate-456620-t1"
+            TOKEN="${{ steps.auth.outputs.access_token }}"
 
-      - name: Rollback if tests failed
-        if: env.TEST_EXIT_CODE != '0'
-        run: |
-          echo "❌ Tests failed — starting rollback..."
-          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
-          PREV_REVISION="${{ steps.get_current_revision.outputs.current_revision }}"
-          NEW_REVISION="${{ steps.import_proxy.outputs.revision }}"
-          ORG="primal-gate-456620-t1"
-          TOKEN="${{ steps.auth.outputs.access_token }}"
+            if [[ -z "$PREV_REVISION" ]]; then
+              echo "⚠️ No previous revision found. Cannot rollback."
+              exit 1
+            fi
 
-          if [[ -z "$PREV_REVISION" ]]; then
-            echo "⚠️ No previous revision found. Cannot rollback."
+            echo "▶️ Undeploying broken revision $NEW_REVISION..."
+            curl -s -X DELETE \
+              -H "Authorization: Bearer $TOKEN" \
+              "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$NEW_REVISION/deployments"
+
+            echo "🔁 Rolling back to revision $PREV_REVISION..."
+            curl -s -X POST \
+              -H "Authorization: Bearer $TOKEN" \
+              "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments"
+
+            echo "✅ Rollback complete to revision $PREV_REVISION"
             exit 1
           fi
-
-          echo "▶️ Undeploying broken revision $NEW_REVISION..."
-          curl -s -X DELETE \
-            -H "Authorization: Bearer $TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$NEW_REVISION/deployments"
-
-          echo "🔁 Rolling back to revision $PREV_REVISION..."
-          curl -s -X POST \
-            -H "Authorization: Bearer $TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments"
-
-          echo "✅ Rollback complete to revision $PREV_REVISION"
