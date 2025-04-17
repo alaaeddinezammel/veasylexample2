@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage continueOnError="false" enabled="true" name="AM-vars">
+  <DisplayName>AM-vars</DisplayName>
+  <Properties/>
+  <!-- Assignation des variables request.content et response.content -->
+  <AssignVariable>
+    <Name>requestContent</Name>
+    <Value>{request.content.body}</Value>
+  </AssignVariable>
+  <AssignVariable>
+    <Name>responseContent</Name>
+    <Value>{response.content.body}</Value>
+  </AssignVariable>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+  <AssignTo createNew="false" transport="http" type="request"/>
+</AssignMessage>

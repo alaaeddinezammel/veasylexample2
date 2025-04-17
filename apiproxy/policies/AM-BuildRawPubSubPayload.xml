@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage name="AM-BuildRawPubSubPayload">
+  <AssignTo createNew="true" transport="http">raw-payload</AssignTo>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+  <Set>
+    <Payload contentType="application/json">
+            {
+                "request": "${request.content}",
+                "response": "${response.content}"
+            }
+        </Payload>
+  </Set>
+</AssignMessage>

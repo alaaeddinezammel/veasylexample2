@@ -1,0 +1,115 @@
+name: Deploy Apigee Proxy
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Auth to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: 'projects/508284363122/locations/global/workloadIdentityPools/github-pool/providers/github-provider-v2'
+          service_account: 'sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com'
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Get API name from XML
+        id: get_api_name
+        run: |
+          sudo apt-get update && sudo apt-get install -y libxml2-utils zip
+          XML_FILE=$(find ./apiproxy -maxdepth 1 -name '*.xml' | head -n 1)
+
+          if [ -z "$XML_FILE" ]; then
+            echo "❌ Aucun fichier XML trouvé dans ./apiproxy"
+            exit 1
+          fi
+
+          API_NAME=$(xmllint --xpath 'string(//APIProxy/@name)' "$XML_FILE")
+          echo "✅ API name extrait: $API_NAME"
+          echo "api_name=$API_NAME" >> $GITHUB_OUTPUT
+
+      - name: Zip Apigee proxy bundle
+        run: |
+          zip -r proxy.zip apiproxy
+
+      - name: Check if API exists
+        id: check_api
+        run: |
+          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          ORG="primal-gate-456620-t1"
+          TOKEN="${{ steps.auth.outputs.access_token }}"
+          
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/apis/$API_NAME")
+
+          if [[ "$STATUS" == "404" ]]; then
+            echo "API does not exist"
+            echo "exists=not-found" >> $GITHUB_OUTPUT
+          else
+            echo "API exists"
+            echo "exists=found" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create API proxy if not found
+        if: steps.check_api.outputs.exists == 'not-found'
+        run: |
+          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          ORG="primal-gate-456620-t1"
+          TOKEN="${{ steps.auth.outputs.access_token }}"
+          
+          echo "Creating new API proxy..."
+          curl -s -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"'"$API_NAME"'"}' \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/apis?name=$API_NAME"
+
+      - name: Import proxy to Apigee
+        id: import_proxy
+        run: |
+          set -e
+          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          ORG="primal-gate-456620-t1"
+          TOKEN="${{ steps.auth.outputs.access_token }}"
+          
+          echo "Sending import request..."
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: multipart/form-data" \
+            -F "file=@proxy.zip" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/apis?action=import&name=$API_NAME")
+
+          echo "API Response: $RESPONSE"
+
+          echo "$RESPONSE" | grep -q '"error"' && exit 1
+          REVISION=$(echo "$RESPONSE" | grep -oP '"revision"\s*:\s*"\K[0-9]+')
+          echo "revision=$REVISION" >> $GITHUB_OUTPUT
+          echo "Imported revision: $REVISION"
+
+      - name: Deploy to eval environment
+        run: |
+          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          REVISION="${{ steps.import_proxy.outputs.revision }}"
+          ORG="primal-gate-456620-t1"
+          TOKEN="${{ steps.auth.outputs.access_token }}"
+
+          echo "Deploying revision $REVISION to 'eval' environment..."
+          curl -s -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments"

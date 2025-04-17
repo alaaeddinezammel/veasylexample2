@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<MessageLogging name="ML-LogToCloudLogging">
+  <CloudLogging>
+    <LogName>projects/{organization.name}/logs/apiproxy-{apiproxy.name}</LogName>
+    <Message contentType="application/json">{formatted.logPayload}</Message>
+  </CloudLogging>
+</MessageLogging>

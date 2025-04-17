@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+  <PreFlow name="PreFlow">
+    <Request/>
+    <Response>
+    </Response>
+  </PreFlow>
+  <Flows>
+    <Flow name="apiDeliver">
+      <Description>Deliver contextual ads</Description>
+      <Request/>
+      <Response/>
+      <Condition>(proxy.pathsuffix MatchesPath "/v1/_deliver") and (request.verb = "POST")</Condition>
+    </Flow>
+    <Flow name="event">
+      <Description>Track events (display, view, click)</Description>
+      <Request/>
+      <Response/>
+      <Condition>(proxy.pathsuffix MatchesPath "/v1/_event") and (request.verb = "POST")</Condition>
+    </Flow>
+    <Flow name="apiPurchase">
+      <Description>Report transaction (purchase)</Description>
+      <Request/>
+      <Response/>
+      <Condition>(proxy.pathsuffix MatchesPath "/v1/_purchase") and (request.verb = "POST")</Condition>
+    </Flow>
+    <Flow name="healthCheck">
+      <Description>Health Check</Description>
+      <Request/>
+      <Response/>
+      <Condition>(proxy.pathsuffix MatchesPath "/v1/health") and (request.verb = "GET")</Condition>
+    </Flow>
+  </Flows>
+  <PostFlow name="PostFlow">
+    <Request/>
+    <Response>
+      <Step>
+        <Name>JS-Build-LogPayload</Name>
+      </Step>
+      <Step>
+        <Name>Flow-Callout-2</Name>
+      </Step>
+    </Response>
+  </PostFlow>
+  <PostClientFlow>
+    <Response>
+      <Step>
+        <Name>ML-LogToCloudLogging</Name>
+      </Step>
+    </Response>
+  </PostClientFlow>
+  <HTTPProxyConnection>
+    <BasePath>/usage-api-veasybl-retail-media-v1</BasePath>
+  </HTTPProxyConnection>
+  <RouteRule name="default">
+    <TargetEndpoint>default</TargetEndpoint>
+  </RouteRule>
+</ProxyEndpoint>

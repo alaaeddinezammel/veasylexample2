@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<PublishMessage continueOnError="true" name="PM-PublishScore">
+  <Source>       {
+                "request": "${request.content}",
+                "response": "${response.content}"
+            }</Source>
+  <CloudPubSub>
+    <Topic>projects/{organization.name}/topics/apigee-retail-media-vesaybl</Topic>
+  </CloudPubSub>
+</PublishMessage>
