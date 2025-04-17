@@ -12,6 +12,10 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    outputs:
+      api_name: ${{ steps.get_api_name.outputs.api_name }}
+      revision: ${{ steps.import_proxy.outputs.revision }}
+      current_revision: ${{ steps.get_current_revision.outputs.current_revision }}
 
     steps:
       - name: Checkout source
@@ -75,20 +79,24 @@ jobs:
           REVISION="${{ steps.import_proxy.outputs.revision }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
-          SERVICE_ACCOUNT="projects/primal-gate-456620-t1/serviceAccounts/sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com"
 
           curl -s -X POST \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"override\": true, \"serviceAccount\": \"$SERVICE_ACCOUNT\"}" \
-            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments"
+            -d "{\"serviceAccount\": \"sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com\"}" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments?override=true"
 
+  test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Install Newman
         run: npm install -g newman
 
-      - name: Run Postman E2E Tests and Rollback if Failed
+      - name: Run Postman E2E Tests
         run: |
-          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          API_NAME="${{ needs.deploy.outputs.api_name }}"
           COLLECTION_PATH=$(find testE2E -type f -name "${API_NAME}*.postman_collection.json" | head -n 1)
 
           if [[ -z "$COLLECTION_PATH" ]]; then
@@ -97,31 +105,37 @@ jobs:
           fi
 
           echo "▶️ Running tests using local collection: $COLLECTION_PATH"
-          if ! newman run "$COLLECTION_PATH" --reporters cli; then
-            echo "❌ Tests failed — starting rollback..."
-            PREV_REVISION="${{ steps.get_current_revision.outputs.current_revision }}"
-            NEW_REVISION="${{ steps.import_proxy.outputs.revision }}"
-            ORG="primal-gate-456620-t1"
-            TOKEN="${{ steps.auth.outputs.access_token }}"
-            SERVICE_ACCOUNT="projects/primal-gate-456620-t1/serviceAccounts/sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com"
+          newman run "$COLLECTION_PATH" --reporters cli
 
-            if [[ -z "$PREV_REVISION" ]]; then
-              echo "⚠️ No previous revision found. Cannot rollback."
-              exit 1
-            fi
+  rollback:
+    needs: [deploy, test]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: 'projects/508284363122/locations/global/workloadIdentityPools/github-pool/providers/github-provider-v2'
+          service_account: 'sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com'
 
-            echo "▶️ Undeploying broken revision $NEW_REVISION..."
-            curl -s -X DELETE \
-              -H "Authorization: Bearer $TOKEN" \
-              "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$NEW_REVISION/deployments"
+      - name: Rollback to previous revision
+        run: |
+          API_NAME="${{ needs.deploy.outputs.api_name }}"
+          REVISION="${{ needs.deploy.outputs.revision }}"
+          PREV_REVISION="${{ needs.deploy.outputs.current_revision }}"
+          ORG="primal-gate-456620-t1"
+          TOKEN="$(gcloud auth print-access-token)"
 
-            echo "🔁 Rolling back to revision $PREV_REVISION..."
-            curl -s -X POST \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"override\": true, \"serviceAccount\": \"$SERVICE_ACCOUNT\"}" \
-              "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments"
+          echo "❌ Tests failed — rolling back..."
+          curl -s -X DELETE \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments"
 
-            echo "✅ Rollback complete to revision $PREV_REVISION"
-            exit 1
-          fi
+          curl -s -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"serviceAccount\": \"sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com\"}" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments?override=true"
+
+          echo "✅ Rollback to $PREV_REVISION complete"
