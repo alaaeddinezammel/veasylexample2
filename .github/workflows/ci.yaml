@@ -90,7 +90,13 @@ jobs:
         run: |
           API_NAME="${{ steps.get_api_name.outputs.api_name }}"
           ENV="eval"
-          COLLECTION_PATH="testE2E/${API_NAME}-E2E-${ENV}-postman_collection.json"
+          COLLECTION_PATH=$(find testE2E -type f -name "${API_NAME}*.postman_collection.json" | head -n 1)
+          
+          if [[ -z "$COLLECTION_PATH" ]]; then
+          echo "❌ No Postman collection found for API: $API_NAME"
+          exit 1
+          fi
+
           BASE_URL="https://${API_NAME}-eval-dot-primal-gate-456620-t1.apigee.net"
 
           if [[ ! -f "$COLLECTION_PATH" ]]; then
