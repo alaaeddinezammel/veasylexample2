@@ -233,7 +233,7 @@
 	"variable": [
 		{
 			"key": "baseUrl",
-			"value": "https://34.120.59.6:443.nip.io/usage-api-veasybl-retail-media-v1",
+			"value": "https://34.120.59.6.nip.io/usage-api-veasybl-retail-media-v1",
 			"type": "string"
 		},
 		{
