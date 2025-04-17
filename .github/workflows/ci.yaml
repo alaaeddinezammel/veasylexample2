@@ -106,7 +106,7 @@ jobs:
           newman run "$COLLECTION_PATH" --reporters cli
 
   rollback:
-    needs: [deploy, test]
+    needs: [ deploy, test ]
     if: failure()
     runs-on: ubuntu-latest
     steps:
@@ -117,40 +117,34 @@ jobs:
           workload_identity_provider: 'projects/508284363122/locations/global/workloadIdentityPools/github-pool/providers/github-provider-v2'
           service_account: 'sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com'
 
-      - name: Rollback to previous revision
+      - name: Rollback to previous revision and delete failed deployment
         run: |
           API_NAME="${{ needs.deploy.outputs.api_name }}"
           NEW_REVISION="${{ needs.deploy.outputs.new_revision }}"
           PREV_REVISION="${{ needs.deploy.outputs.current_revision }}"
           ORG="primal-gate-456620-t1"
+          ENV="eval"
           TOKEN="$(gcloud auth print-access-token)"
-
+          
           echo "❌ Tests failed — rolling back..."
-          echo "🧹 Undeploying new revision: $NEW_REVISION"
+          echo "🧹 Undeploying failed revision: $NEW_REVISION"
           curl -s -X DELETE \
             -H "Authorization: Bearer $TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$NEW_REVISION/deployments"
-
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/$ENV/apis/$API_NAME/revisions/$NEW_REVISION/deployments" || echo "⚠️ Undeploy failed or was already undeployed"
+          
           if [[ -n "$PREV_REVISION" ]]; then
             echo "🔁 Redeploying previous revision: $PREV_REVISION"
             curl -s -X POST \
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/json" \
               -d "{\"serviceAccount\": \"sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com\"}" \
-              "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments?override=true"
+              "https://apigee.googleapis.com/v1/organizations/$ORG/environments/$ENV/apis/$API_NAME/revisions/$PREV_REVISION/deployments?override=true"
             echo "✅ Rollback to $PREV_REVISION complete"
           else
             echo "⚠️ No previous revision to rollback to."
           fi
-
-      - name: Cleanup revision 69
-        run: |
-          echo "🧹 Trying to undeploy revision 69 (if exists)..."
+          
+          echo "🗑️ Deleting failed revision: $NEW_REVISION"
           curl -s -X DELETE \
-            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-            "https://apigee.googleapis.com/v1/organizations/primal-gate-456620-t1/environments/eval/apis/usage-api-veasybl-retail-media-v1/revisions/69/deployments" || true
-
-          echo "🗑️ Deleting revision 69..."
-          curl -s -X DELETE \
-            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-            "https://apigee.googleapis.com/v1/organizations/primal-gate-456620-t1/apis/usage-api-veasybl-retail-media-v1/revisions/69" || true
+            -H "Authorization: Bearer $TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/apis/$API_NAME/revisions/$NEW_REVISION" || echo "⚠️ Deletion failed or revision already removed"
