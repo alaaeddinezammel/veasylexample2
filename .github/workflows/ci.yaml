@@ -142,3 +142,15 @@ jobs:
           else
             echo "⚠️ No previous revision to rollback to."
           fi
+
+      - name: Cleanup revision 69
+        run: |
+          echo "🧹 Trying to undeploy revision 69 (if exists)..."
+          curl -s -X DELETE \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            "https://apigee.googleapis.com/v1/organizations/primal-gate-456620-t1/environments/eval/apis/usage-api-veasybl-retail-media-v1/revisions/69/deployments" || true
+
+          echo "🗑️ Deleting revision 69..."
+          curl -s -X DELETE \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            "https://apigee.googleapis.com/v1/organizations/primal-gate-456620-t1/apis/usage-api-veasybl-retail-media-v1/revisions/69" || true
