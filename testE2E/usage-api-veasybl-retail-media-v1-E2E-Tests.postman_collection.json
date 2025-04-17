@@ -1,0 +1,250 @@
+{
+	"info": {
+		"_postman_id": "21d4c497-7f2a-4cf3-ba95-22e5795ba15a",
+		"name": "Veasybl API - E2E Tests",
+		"description": "Postman collection for testing Veasybl API endpoints with end-to-end test scenarios.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "42667396"
+	},
+	"item": [
+		{
+			"name": "Deliver Ads",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+							"pm.test(\"Slots array exists\", function () {",
+							"   var jsonData = pm.response.json();",
+							"   pm.expect(jsonData.slots).to.be.an('array');",
+							"   if (jsonData.slots.length > 0 && jsonData.slots[0].products && jsonData.slots[0].products.length > 0) {",
+							"       pm.environment.set(\"test_beacon\", jsonData.slots[0].products[0].beacon);",
+							"   }",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{x-api-key}}",
+						"type": "text"
+					},
+					{
+						"key": "x-retailer-id",
+						"value": "{{x-retailer-id}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"visitor\": \"CrAzK0R1Zhf5sfWvguJQIjktikitakasouki\",\n  \"alias\": \"77963b7a931377ad4ab5ad6a9cd718aa\",\n  \"placement\": \"search\",\n  \"slots\": [\n    {\n      \"id\": \"sp\",\n      \"max\": 3\n    }\n  ],\n  \"search_terms\": \"ice cream with chocolate\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/v1/_deliver",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"v1",
+						"_deliver"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Track Event",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{x-api-key}}",
+						"type": "text"
+					},
+					{
+						"key": "x-retailer-id",
+						"value": "{{x-retailer-id}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"display\": [\n    \"{{test_beacon}}\"\n  ],\n  \"view\": [\n    \"{{test_beacon}}\"\n  ],\n  \"click\": [\n    \"{{test_beacon}}\"\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/v1/_event",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"v1",
+						"_event"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Purchase Report",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 204\", function () { pm.response.to.have.status(204); });"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{x-api-key}}",
+						"type": "text"
+					},
+					{
+						"key": "x-retailer-id",
+						"value": "{{x-retailer-id}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"visitor\": \"cYFwasdXSlhzqYDpWB0tw\",\n  \"alias\": \"77963b7a931377ad4ab5ad6a9cd718aa\",\n  \"currency\": \"EUR\",\n  \"purchase_id\": \"123RTA7Z\",\n  \"purchase_date\": \"2021-10-05T14:48:00.000Z\",\n  \"items\": [\n    {\n      \"product_id\": \"3E4NZE3T12\",\n      \"price\": 400,\n      \"quantity\": 1,\n      \"offer_id\": \"off1a7z26ue\",\n      \"seller_id\": \"2ac661\",\n      \"seller\": \"ACME NG\",\n      \"brand\": \"FAMOUS BRAND\"\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/v1/_purchase",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"v1",
+						"_purchase"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Health Check",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{x-api-key}}",
+						"type": "text"
+					},
+					{
+						"key": "x-retailer-id",
+						"value": "{{x-retailer-id}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/v1/health",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"v1",
+						"health"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://34.120.59.6:443.nip.io/usage-api-veasybl-retail-media-v1",
+			"type": "string"
+		},
+		{
+			"key": "x-api-key",
+			"value": "291d725e-2770-49fe-a25c-168a3886c04c",
+			"type": "string"
+		},
+		{
+			"key": "x-retailer-id",
+			"value": "LMFR",
+			"type": "string"
+		}
+	]
+}

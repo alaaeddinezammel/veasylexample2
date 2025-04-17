@@ -1,34 +1,33 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<APIProxy revision="54" name="usage-api-veasybl-retail-media-v1">
-  <DisplayName/>
-  <Description>Retail media API</Description>
-  <CreatedAt>1744583059397</CreatedAt>
-  <LastModifiedAt>1744583059397</LastModifiedAt>
-  <BasePaths>/usage-api-veasybl-retail-media-v1</BasePaths>
-  <Policies>
-    <Policy>LogToPubSub</Policy>
-    <Policy>PM-PublishScore</Policy>
-    <Policy>KVM-Insert-ServiceAccount</Policy>
-    <Policy>KVM-Read-ServiceAccount</Policy>
-    <Policy>AM-BuildRawPubSubPayload</Policy>
-    <Policy>ML-LogToCloudLogging</Policy>
-    <Policy>Assign-Message-1</Policy>
-    <Policy>AM-vars</Policy>
-    <Policy>Assign-Message-2</Policy>
-    <Policy>Assign-Message-3</Policy>
-    <Policy>JS-Build-LogPayload</Policy>
-    <Policy>Flow-Callout-1</Policy>
-    <Policy>flowlog</Policy>
-    <Policy>logpubsub</Policy>
-    <Policy>Flow-Callout-2</Policy>
-  </Policies>
-  <ProxyEndpoints>
-    <ProxyEndpoint>default</ProxyEndpoint>
-  </ProxyEndpoints>
-  <Resources>
-    <Resource>jsc://JS-Build-LogPayload.js</Resource>
-  </Resources>
-  <TargetEndpoints>
-    <TargetEndpoint>default</TargetEndpoint>
-  </TargetEndpoints>
+<APIProxy revision="56" name="usage-api-veasybl-retail-media-v1">
+    <DisplayName></DisplayName>
+    <Description>Retail media API</Description>
+    <CreatedAt>1744899312904</CreatedAt>
+    <LastModifiedAt>1744899312904</LastModifiedAt>
+    <BasePaths>/usage-api-veasybl-retail-media-v1</BasePaths>
+    <Policies>
+        <Policy>Assign-Message-2</Policy>
+        <Policy>AM-BuildRawPubSubPayload</Policy>
+        <Policy>Assign-Message-1</Policy>
+        <Policy>KVM-Insert-ServiceAccount</Policy>
+        <Policy>ML-LogToCloudLogging</Policy>
+        <Policy>flowlog</Policy>
+        <Policy>KVM-Read-ServiceAccount</Policy>
+        <Policy>Assign-Message-3</Policy>
+        <Policy>logpubsub</Policy>
+        <Policy>Flow-Callout-1</Policy>
+        <Policy>JS-Build-LogPayload</Policy>
+        <Policy>Flow-Callout-2</Policy>
+        <Policy>PM-PublishScore</Policy>
+        <Policy>LogToPubSub</Policy>
+        <Policy>AM-vars</Policy>
+    </Policies>
+    <ProxyEndpoints>
+        <ProxyEndpoint>default</ProxyEndpoint>
+    </ProxyEndpoints>
+    <Resources>
+        <Resource>jsc://JS-Build-LogPayload.js</Resource>
+    </Resources>
+    <TargetEndpoints>
+        <TargetEndpoint>default</TargetEndpoint>
+    </TargetEndpoints>
 </APIProxy>

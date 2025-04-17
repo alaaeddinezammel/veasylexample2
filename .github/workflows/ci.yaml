@@ -8,7 +8,7 @@ on:
 permissions:
   id-token: write
   contents: read
-#jobs
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -25,27 +25,25 @@ jobs:
           workload_identity_provider: 'projects/508284363122/locations/global/workloadIdentityPools/github-pool/providers/github-provider-v2'
           service_account: 'sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com'
 
-      - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v1
+      - name: Setup gcloud CLI + jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxml2-utils zip jq
 
       - name: Get API name from XML
         id: get_api_name
         run: |
-          sudo apt-get update && sudo apt-get install -y libxml2-utils zip
           XML_FILE=$(find ./apiproxy -maxdepth 1 -name '*.xml' | head -n 1)
-
           if [ -z "$XML_FILE" ]; then
             echo "❌ Aucun fichier XML trouvé dans ./apiproxy"
             exit 1
           fi
-
           API_NAME=$(xmllint --xpath 'string(//APIProxy/@name)' "$XML_FILE")
           echo "✅ API name extrait: $API_NAME"
           echo "api_name=$API_NAME" >> $GITHUB_OUTPUT
 
       - name: Zip Apigee proxy bundle
-        run: |
-          zip -r proxy.zip apiproxy
+        run: zip -r proxy.zip apiproxy
 
       - name: Check if API exists
         id: check_api
@@ -53,11 +51,9 @@ jobs:
           API_NAME="${{ steps.get_api_name.outputs.api_name }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
-          
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer $TOKEN" \
             "https://apigee.googleapis.com/v1/organizations/$ORG/apis/$API_NAME")
-
           if [[ "$STATUS" == "404" ]]; then
             echo "API does not exist"
             echo "exists=not-found" >> $GITHUB_OUTPUT
@@ -72,13 +68,24 @@ jobs:
           API_NAME="${{ steps.get_api_name.outputs.api_name }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
-          
           echo "Creating new API proxy..."
           curl -s -X POST \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"name":"'"$API_NAME"'"}' \
             "https://apigee.googleapis.com/v1/organizations/$ORG/apis?name=$API_NAME"
+
+      - name: Get current deployed revision
+        id: get_current_revision
+        run: |
+          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          ORG="primal-gate-456620-t1"
+          TOKEN="${{ steps.auth.outputs.access_token }}"
+          CURRENT_REV=$(curl -s -H "Authorization: Bearer $TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/deployments" \
+            | jq -r '.deployments[0].revision // empty')
+          echo "✅ Current deployed revision: $CURRENT_REV"
+          echo "current_revision=$CURRENT_REV" >> $GITHUB_OUTPUT
 
       - name: Import proxy to Apigee
         id: import_proxy
@@ -87,16 +94,11 @@ jobs:
           API_NAME="${{ steps.get_api_name.outputs.api_name }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
-          
-          echo "Sending import request..."
           RESPONSE=$(curl -s -X POST \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: multipart/form-data" \
             -F "file=@proxy.zip" \
             "https://apigee.googleapis.com/v1/organizations/$ORG/apis?action=import&name=$API_NAME")
-
-          echo "API Response: $RESPONSE"
-
           echo "$RESPONSE" | grep -q '"error"' && exit 1
           REVISION=$(echo "$RESPONSE" | grep -oP '"revision"\s*:\s*"\K[0-9]+')
           echo "revision=$REVISION" >> $GITHUB_OUTPUT
@@ -108,8 +110,44 @@ jobs:
           REVISION="${{ steps.import_proxy.outputs.revision }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
-
-          echo "Deploying revision $REVISION to 'eval' environment..."
+          echo "Deploying revision $REVISION to 'eval'..."
           curl -s -X POST \
             -H "Authorization: Bearer $TOKEN" \
             "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments"
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      - name: Run Postman E2E Tests
+        id: run_tests
+        continue-on-error: true
+        run: |
+          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          ENV="eval"
+          COLLECTION_PATH="testE2E/${API_NAME}-E2E-${ENV}-postman_collection.json"
+          BASE_URL="https://${API_NAME}-eval-dot-${{ secrets.PROJECT_ID }}.apigee.net"
+          if [[ ! -f "$COLLECTION_PATH" ]]; then
+            echo "❌ Collection not found: $COLLECTION_PATH"
+            exit 1
+          fi
+          echo "▶️ Running tests on $BASE_URL..."
+          newman run "$COLLECTION_PATH" \
+            --env-var "baseUrl=$BASE_URL" \
+            --reporters cli
+
+      - name: Rollback if tests fail
+        if: steps.run_tests.outcome == 'failure'
+        run: |
+          echo "❌ Tests failed — starting rollback..."
+          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          PREV_REVISION="${{ steps.get_current_revision.outputs.current_revision }}"
+          ORG="primal-gate-456620-t1"
+          TOKEN="${{ steps.auth.outputs.access_token }}"
+          if [[ -z "$PREV_REVISION" ]]; then
+            echo "⚠️ No previous revision found. Cannot rollback."
+            exit 1
+          fi
+          curl -s -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments"
+          echo "✅ Rollback to revision $PREV_REVISION done"
