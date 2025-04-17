@@ -13,9 +13,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     outputs:
-      api_name: ${{ steps.get_api_name.outputs.api_name }}
-      revision: ${{ steps.import_proxy.outputs.revision }}
+      api_name: ${{ steps.get_current_revision.outputs.api_name }}
       current_revision: ${{ steps.get_current_revision.outputs.current_revision }}
+      new_revision: ${{ steps.import_proxy.outputs.revision }}
 
     steps:
       - name: Checkout source
@@ -32,24 +32,21 @@ jobs:
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v1
 
-      - name: Get API name from XML
-        id: get_api_name
+      - name: Get currently deployed revision
+        id: get_current_revision
         run: |
-          sudo apt-get update && sudo apt-get install -y libxml2-utils zip
+          sudo apt-get update && sudo apt-get install -y libxml2-utils jq
           XML_FILE=$(find ./apiproxy -maxdepth 1 -name '*.xml' | head -n 1)
           API_NAME=$(xmllint --xpath 'string(//APIProxy/@name)' "$XML_FILE")
           echo "api_name=$API_NAME" >> $GITHUB_OUTPUT
 
-      - name: Get currently deployed revision
-        id: get_current_revision
-        run: |
-          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
           ORG="primal-gate-456620-t1"
+          ENV="eval"
           TOKEN="${{ steps.auth.outputs.access_token }}"
 
           CURRENT=$(curl -s -H "Authorization: Bearer $TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/deployments" \
-            | jq -r '.deployments[0].revision')
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/$ENV/apis/$API_NAME/deployments" \
+            | jq -r '.deployments[0].revision // empty')
 
           echo "current_revision=$CURRENT" >> $GITHUB_OUTPUT
 
@@ -59,7 +56,7 @@ jobs:
       - name: Import proxy to Apigee
         id: import_proxy
         run: |
-          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          API_NAME="${{ steps.get_current_revision.outputs.api_name }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
 
@@ -75,7 +72,7 @@ jobs:
 
       - name: Deploy to eval environment
         run: |
-          API_NAME="${{ steps.get_api_name.outputs.api_name }}"
+          API_NAME="${{ steps.get_current_revision.outputs.api_name }}"
           REVISION="${{ steps.import_proxy.outputs.revision }}"
           ORG="primal-gate-456620-t1"
           TOKEN="${{ steps.auth.outputs.access_token }}"
@@ -91,6 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install Newman
         run: npm install -g newman
 
@@ -122,20 +120,25 @@ jobs:
       - name: Rollback to previous revision
         run: |
           API_NAME="${{ needs.deploy.outputs.api_name }}"
-          REVISION="${{ needs.deploy.outputs.revision }}"
+          NEW_REVISION="${{ needs.deploy.outputs.new_revision }}"
           PREV_REVISION="${{ needs.deploy.outputs.current_revision }}"
           ORG="primal-gate-456620-t1"
           TOKEN="$(gcloud auth print-access-token)"
 
           echo "❌ Tests failed — rolling back..."
+          echo "🧹 Undeploying new revision: $NEW_REVISION"
           curl -s -X DELETE \
             -H "Authorization: Bearer $TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$REVISION/deployments"
+            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$NEW_REVISION/deployments"
 
-          curl -s -X POST \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"serviceAccount\": \"sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com\"}" \
-            "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments?override=true"
-
-          echo "✅ Rollback to $PREV_REVISION complete"
+          if [[ -n "$PREV_REVISION" ]]; then
+            echo "🔁 Redeploying previous revision: $PREV_REVISION"
+            curl -s -X POST \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"serviceAccount\": \"sa-ci-cd-github@primal-gate-456620-t1.iam.gserviceaccount.com\"}" \
+              "https://apigee.googleapis.com/v1/organizations/$ORG/environments/eval/apis/$API_NAME/revisions/$PREV_REVISION/deployments?override=true"
+            echo "✅ Rollback to $PREV_REVISION complete"
+          else
+            echo "⚠️ No previous revision to rollback to."
+          fi
